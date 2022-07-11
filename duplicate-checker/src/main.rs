@@ -28,14 +28,13 @@ fn writeAndHash(start : String) {
     }
 }
 
+/*
 fn main() -> std::io::Result<()> {
     let mut start_folder : String = String::new();
 
     println!("Enter a start folder: ");
 
     let path = env::current_dir()?;
-
-    let file : String = format!("{}/", path.display());
     
     stdin().read_line(&mut start_folder).expect("Failed to read line");
     // start_folder.insert_str(0, &file);
@@ -43,9 +42,24 @@ fn main() -> std::io::Result<()> {
 
     println!("Folder: {}", start_folder);
 
-    let contents : String = fs::read_to_string(start_folder).expect("Something went wrong reading the file");
+    let mut file = File::open(start_folder).expect("File not found");
 
-    println!("Contents: {}", contents);
+    let mut data : String = String::new();
+
+    file.read_to_string(&mut data).expect("Something went wrong reading the file");
+
+    println!("Contents: {}", data);
 
     Ok(())
+} 
+*/
+
+fn main() {
+    // let mut file : File = File::create("hello.txt").expect("Error encountered while creating file!");
+    // file.write_all(b"what in the son of a yak").expect("Error while writing to file");
+    let mut thing : String = String::from("bruh.txt");
+    // (&thing as &str).what_is_this();
+    let file1 = File::open(&thing as &str).expect("File not found");
+    let file2 = File::open("bruh.txt").expect("File not found");
+
 }
