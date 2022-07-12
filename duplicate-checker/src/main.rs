@@ -5,6 +5,9 @@ use img_hash::{HasherConfig, HashAlg};
 
 use std::collections::hash_map::HashMap;
 
+use sha2::Sha512;
+use sha2::Digest;
+
 use std::io::stdin;
 use std::vec::Vec;
 
@@ -18,16 +21,16 @@ use glob::glob;
 use std::path::PathBuf;
 
 fn viewPNG(start : &str) -> () {
-    let mut map : HashMap<img_hash::ImageHash, PathBuf> = HashMap::new();
+    let mut map = HashMap::new();
     let hasher = HasherConfig::new().to_hasher();
     for entry in glob(&(format!("{}/**/*.png", start)) as &str).expect("Failed to read glob pattern") {
 
-        let image1 = image::open(&entry.unwrap().as_path()).unwrap();
+        let hashedValue = Sha512::digest(&entry.unwrap().into_os_string().into_string().unwrap();
 
-        let hashedValue : img_hash::ImageHash = hasher.hash_image(&image1);
         if (map.contains_key(&hashedValue)) {
             
         }
+
         println!("{:?}", entry.unwrap().display());
     }
 }
