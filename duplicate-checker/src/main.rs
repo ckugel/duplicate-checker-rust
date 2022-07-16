@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use std::fs;
+use std::intrinsics::exact_div;
 
 use glob::glob;
 use std::path::PathBuf;
@@ -23,14 +24,22 @@ use img_hash::HasherConfig;
 extern crate image;
 extern crate img_hash;
 
-fn view_img(start : &str, extension: &str) -> () {
-    let mut set : HashMap<Vec<u8>, Box<String>>  = HashMap::new();
-    for entry in glob(&(format!("{}/**/*.{}", start, extension)) as &str).expect("Failed to read glob pattern") {
+fn view_png(start : &str) -> () {
+    let mut set : HashSet<Vec<u8>>  = HashSet::new();
+    let mut size_set : HashSet<&u64> = HashSet::new();
+    for entry in glob(&(format!("{}/**/*.png", start)) as &str).expect("Failed to read glob pattern") {
 
         let path: PathBuf = entry.unwrap();
-        let name: Box<String> = Box::new(String::from(path.as_path().to_str().unwrap()));
-
         let file: File = File::open(&path).expect("Failed to read line");
+
+        let size : &u64 = &file.metadata().unwrap().len();
+
+        if size_set.contains(size) {
+            continue;
+        }
+
+        size_set.insert(size);
+
         let mut reader: BufReader<File>  = BufReader::new(file);
         let mut buffer: Vec<u8> = Vec::new();
 
@@ -40,20 +49,21 @@ fn view_img(start : &str, extension: &str) -> () {
         hasher.update(&buffer);
         let vec : Vec<u8> = hasher.finalize().to_vec();
 
-        if name[name.rfind("/").unwrap() + 1..].eq("IMG_3224.JPG") {
-            println!("{} has a hash value of: {:?}", name, vec);
-        }
-
-
         if set.contains_key(&vec) {
-            // print!("Removing {}... ", path.to_str().unwrap());
+            print!("Removing {}... ", path.to_str().unwrap());
             // std::fs::remove_file(path).ok();
-            // print!("Done \n");
-            println!("{} is the same as {}", &name, set.get(&vec).as_deref().unwrap());
+            print!("Done \n");
+        } else {
+            set.insert(vec);
         }
-        else {
-            set.insert(vec, name);
-        }
+    }
+}
+
+fn view_jpeg(start: &str, extension: &str) {
+    let mut map: HashMap<u64, Box<String>> = HashMap::new();
+    let mut size_set: HashSet<u64> = HashSet::new();
+    for entry in glob(&format!("{}/**/*.{}", start, extension) as &str).expect("Failed to read glob pattern") {
+        if (entry)
     }
 }
 
@@ -68,8 +78,8 @@ fn main() -> std::io::Result<()> {
 
     // start_folder.truncate(start_folder.len() - 1);
 
-    let path1: String = String::from("/mnt/3468843A6883F8BE/pictures-videos/vacations-holidays/San Francisco 2022/IMG_3224.JPG");
-    let path2: String = String::from("/mnt/3468843A6883F8BE/pictures-videos/vacations-holidays/Cali 2022/IMG_3224.JPG");
+    let path1: String = String::from("/mnt/3468843A6883F8BE/pictures-videos/vacations-holidays/San Francisco 2022/IMG_3226.JPG");
+    let path2: String = String::from("/mnt/3468843A6883F8BE/pictures-videos/vacations-holidays/Cali 2022/IMG_3226.JPG");
 
     // let path1: String = String::from("folder1/Screenshot from 2021-09-02 22-25-30.png");
     // let path2: String = String::from("folder1/Screenshot from 2021-10-17 23-22-40.png");
@@ -87,7 +97,7 @@ fn main() -> std::io::Result<()> {
 
     println!("Hamming Distance: {}", hash1.dist(&hash2));
 
-    // view_img(&start_folder as &str, "png");
+    view_png(&start_folder as &str);
     // view_img(&start_folder as &str, "JPG");
     // view_img(&start_folder as &str, "jpeg");
     
