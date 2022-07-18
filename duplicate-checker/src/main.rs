@@ -19,31 +19,62 @@ use std::path::PathBuf;
 use std::io::BufReader;
 use img_hash::HasherConfig;
 
+use std::collections::HashMap;
+
 fn view_png(start : &str) -> () {
-    let mut set : HashSet<Vec<u8>>  = HashSet::new();
-    for entry in glob(&(format!("{}/**/*.png", start)) as &str).expect("Failed to read glob pattern") {
+    let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
+
+    let hasher = HasherConfig::new().to_hasher();
+
+    let mut extension_map: HashMap<&str, HashSet<Box<String>>> = HashMap::from([("jpg", HashSet::new()), ("jpeg", HashSet::new()), ("JPG", HashSet::new())]);
+
+    for entry in glob(&(format!("{}/**/*", start)) as &str).expect("Failed to read glob pattern") {
+        
         let path: PathBuf = entry.unwrap();
-        let file: File = File::open(&path).expect("Failed to read line");
+        let extension = path.extension().unwrap_or_default().to_str().unwrap();
 
-        let mut reader: BufReader<File>  = BufReader::new(file);
-        let mut buffer: Vec<u8> = Vec::new();
+        match extension {
+            "png" => ({
+                let file: File = File::open(&path).expect("Failed to read line");
+        
+                let mut reader: BufReader<File>  = BufReader::new(file);
+                let mut buffer: Vec<u8> = Vec::new();
+        
+                reader.read_to_end(&mut buffer).ok();
+        
+                let mut hasher : Sha512 = Sha512::new();
+                hasher.update(&buffer);
+                let vec : Vec<u8> = hasher.finalize().to_vec();
+        
+                if png_set.contains(&vec) {
+                    print!("Removing {}... ", path.to_str().unwrap());
+                    // std::fs::remove_file(&path).ok();
+                    print!("Done \n");
+                } else {
+                    png_set.insert(vec);
+                }
+            }),
+            "jpg" | "jpeg" | "JPG" => ({
+                let name: String = String::from(path.as_path().to_str().unwrap());
 
-        reader.read_to_end(&mut buffer).ok();
-
-        let mut hasher : Sha512 = Sha512::new();
-        hasher.update(&buffer);
-        let vec : Vec<u8> = hasher.finalize().to_vec();
-
-        if set.contains(&vec) {
-            print!("Removing {}... ", path.to_str().unwrap());
-            std::fs::remove_file(path).ok();
-            print!("Done \n");
-        } else {
-            set.insert(vec);
+                let image = image::open(&path).unwrap();
+                let hash: Box<String> = Box::new(hasher.hash_image(&image).to_base64());
+        
+                if extension_map.get(&*extension).unwrap().contains(&hash) {
+                    print!("Removing {}... ", name);
+                    // std::fs::remove_file(&path).ok();
+                    print!("Done \n");
+                }
+                else {
+                    extension_map.get_mut(&*extension).unwrap().insert(hash);
+                }
+            }),
+            _ => continue,
         }
     }
 }
 
+/*
 fn view_jpeg(start: &str, extension: &str) {
     let mut set: HashSet<Box<String>> = HashSet::new();
     let hasher = HasherConfig::new().to_hasher();
@@ -65,6 +96,7 @@ fn view_jpeg(start: &str, extension: &str) {
         }
     }
 }
+*/
 
 fn main() -> std::io::Result<()> {
     let mut start_folder : String = String::new();
@@ -97,9 +129,9 @@ fn main() -> std::io::Result<()> {
     // println!("Hamming Distance: {}", hash1.dist(&hash2));   
 
     view_png(&start_folder as &str);
-    view_jpeg(&start_folder as &str, "JPG");
-    view_jpeg(&start_folder as &str, "jpeg");
-    view_jpeg(&start_folder as &str, "jpg");
+    // view_jpeg(&start_folder as &str, "JPG");
+    // view_jpeg(&start_folder as &str, "jpeg");
+    // view_jpeg(&start_folder as &str, "jpg");
     
 
     Ok(())
