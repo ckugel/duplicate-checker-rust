@@ -1,3 +1,4 @@
+use std::collections::hash_map::DefaultHasher;
 use file_data_img::FileDataImg;
 use file_data_mov::FileDataMov;
 
@@ -24,17 +25,19 @@ use std::path::PathBuf;
 use std::io::BufReader;
 
 use std::collections::HashMap;
+use std::hash::Hash;
 
 
 fn view_png(start : &str) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
 
-    let mut extension_map: HashMap<&str, HashSet<Box<String>>> = HashMap::from([("jpg", HashSet::new()), ("jpeg", HashSet::new()), ("JPG", HashSet::new())]);
+    let mut jpeg_set: HashSet<u64> = HashSet::new();
 
     for entry in glob(&(format!("{}/**/*", start)) as &str).expect("Failed to read glob pattern") {
         
         let path: PathBuf = entry.unwrap();
         let extension = path.extension().unwrap_or_default().to_str().unwrap();
+
 
         match extension {
             "png" => ({
@@ -53,12 +56,25 @@ fn view_png(start : &str) -> () {
                     print!("Removing {}... ", &path.to_str().unwrap());
                     // std::fs::remove_file(&path).ok();
                     print!("Done \n");
-                } else {
+                }
+                else {
                     png_set.insert(vec);
                 }
             }),
             "jpg" | "jpeg" | "JPG" => ({
-                let meta: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
+                let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
+                let mut hasher: DefaultHasher = DefaultHasher::new();
+
+                let value: &u64 = &file_data.hash(&mut hasher);
+
+                if jpeg_set.contains(&value) {
+                    print!("Removing {}... ", &path.to_str().unwrap());
+                    // std::fs::remove_file(&path).ok();
+                    print!("Done \n");
+                }
+                else {
+                    jpeg_set.insert(*value);
+                }
             }),
             _ => continue,
         }
