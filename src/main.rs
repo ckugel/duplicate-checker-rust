@@ -1,5 +1,10 @@
+use file_data_img::FileDataImg;
+use file_data_mov::FileDataMov;
+
+mod file_data_img;
+mod file_data_mov;
+
 extern crate image;
-extern crate img_hash;
 
 use std::collections::hash_set::HashSet;
 
@@ -17,14 +22,12 @@ use glob::glob;
 use std::path::PathBuf;
 
 use std::io::BufReader;
-use img_hash::HasherConfig;
 
 use std::collections::HashMap;
 
+
 fn view_png(start : &str) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
-
-    let hasher = HasherConfig::new().to_hasher();
 
     let mut extension_map: HashMap<&str, HashSet<Box<String>>> = HashMap::from([("jpg", HashSet::new()), ("jpeg", HashSet::new()), ("JPG", HashSet::new())]);
 
@@ -47,7 +50,7 @@ fn view_png(start : &str) -> () {
                 let vec : Vec<u8> = hasher.finalize().to_vec();
         
                 if png_set.contains(&vec) {
-                    print!("Removing {}... ", path.to_str().unwrap());
+                    print!("Removing {}... ", &path.to_str().unwrap());
                     // std::fs::remove_file(&path).ok();
                     print!("Done \n");
                 } else {
@@ -55,19 +58,7 @@ fn view_png(start : &str) -> () {
                 }
             }),
             "jpg" | "jpeg" | "JPG" => ({
-                let name: String = String::from(path.as_path().to_str().unwrap());
-
-                let image = image::open(&path).unwrap();
-                let hash: Box<String> = Box::new(hasher.hash_image(&image).to_base64());
-        
-                if extension_map.get(&*extension).unwrap().contains(&hash) {
-                    print!("Removing {}... ", name);
-                    // std::fs::remove_file(&path).ok();
-                    print!("Done \n");
-                }
-                else {
-                    extension_map.get_mut(&*extension).unwrap().insert(hash);
-                }
+                let meta: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
             }),
             _ => continue,
         }
