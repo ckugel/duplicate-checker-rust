@@ -1,5 +1,3 @@
-#![feature(test)]
-
 mod file_data_img;
 mod file_data_mov;
 
@@ -7,9 +5,6 @@ use file_data_img::FileDataImg;
 
 extern crate image;
 extern crate opencv;
-extern crate test;
-
-use opencv::prelude::*;
 
 use std::collections::hash_set::HashSet;
 
@@ -35,7 +30,14 @@ use crate::file_data_mov::FileDataMov;
 
 use std::os::unix::fs::MetadataExt;
 
-fn view_png(start : &str) -> () {
+fn remove_file(path: &PathBuf, mut output: &File) -> () {
+    // std::fs::remove_file(&path).ok();
+    output.write_all(b"Removed: ").unwrap();
+    output.write_all((&path.to_str().unwrap()).as_ref()).unwrap();
+    output.write_all(b"\n").unwrap();
+}
+
+fn view_png(start : &str, mut output: &File) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
     let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
     let mut mov_set: HashSet<FileDataMov> = HashSet::new();
@@ -45,7 +47,7 @@ fn view_png(start : &str) -> () {
         let extension = path.extension().unwrap_or_default().to_str().unwrap();
 
         match extension {
-            "png" => ({
+            "png" => {
                 let file: File = File::open(&path).expect("Failed to open file");
         
                 let mut reader: BufReader<File>  = BufReader::new(file);
@@ -58,41 +60,34 @@ fn view_png(start : &str) -> () {
                 let vec : Vec<u8> = hasher.finalize().to_vec();
         
                 if png_set.contains(&vec) {
-                    print!("Removing {}... ", &path.to_str().unwrap());
-                    // std::fs::remove_file(&path).ok();
-                    print!("Done \n");
+                    remove_file(&path, &mut output);
                 }
                 else {
                     png_set.insert(vec);
                 }
-            }),
-            "jpg" | "jpeg" | "JPG" => ({
+            },
+            "jpg" | "jpeg" | "JPG" => {
                 let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
 
                 if jpeg_set.contains(&file_data) {
-                    print!("Removing {}... ", &path.to_str().unwrap());
-                    // std::fs::remove_file(&path).ok();
-                    print!("Done \n");
+                    remove_file(&path, &mut output);
                 }
                 else {
                     jpeg_set.insert(file_data);
                 }
-            }),
-            "MOV" => ({
+            },
+            "MOV" => {
                 let file: File = File::open(&path.to_str().unwrap()).expect("Failed to open file");
                 let cap: Box<VideoCapture> = Box::new(VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap());
-                println!("{}", &path.to_str().unwrap());
                 let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
 
                 if mov_set.contains(&mov_data) {
-                    print!("Removing {}... ", &path.to_str().unwrap());
-                    // std::fs::remove_file(&path).ok();
-                    print!("Done \n");
+                    remove_file(&path, &mut output);
                 }
                 else {
                     mov_set.insert(mov_data);
                 }
-            }),
+            },
             _ => continue,
         }
     }
@@ -109,31 +104,11 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
-    view_png(&start_folder as &str);
+    let mut out_file: File = File::create("output.txt").unwrap();
+
+    view_png(&start_folder as &str, &mut out_file);
     
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs::File;
-    use test::Bencher;
-    use test::black_box;
-    use opencv::videoio;
-    use opencv::videoio::{VideoCapture, VideoCaptureTraitConst};
-    use crate::FileDataMov;
-
-    const FILES: [&str; 3] = ["./folder1/HarryPotter/IMG_3693.MOV", "./folder1/HarryPotter/IMG_3698.MOV", "./folder1/HarryPotter/IMG_3700.MOV"];
-
-    #[bench]
-    fn bench(bencher: &mut Bencher) {
-         for i in 0..3 {
-             let file: File = File::open(FILES[i]).unwrap();
-             let cap: Box<VideoCapture> = Box::new(VideoCapture::from_file(FILES[i], videoio::CAP_ANY).unwrap());
-             let mut data = FileDataMov::new(file.metadata().unwrap().len(), cap);
-             bencher.iter(|| data.compute_frames_long());
-         }
-    }
 }
 
