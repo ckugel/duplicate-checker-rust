@@ -1,11 +1,10 @@
-use std::collections::hash_map::DefaultHasher;
-use file_data_img::FileDataImg;
-use file_data_mov::FileDataMov;
-
 mod file_data_img;
 mod file_data_mov;
 
+use file_data_img::FileDataImg;
+
 extern crate image;
+extern crate opencv;
 
 use std::collections::hash_set::HashSet;
 
@@ -24,24 +23,32 @@ use std::path::PathBuf;
 
 use std::io::BufReader;
 
-use std::collections::HashMap;
-use std::hash::Hash;
+use opencv::videoio;
 
+use opencv::videoio::VideoCapture;
+use crate::file_data_mov::FileDataMov;
 
-fn view_png(start : &str) -> () {
+use std::os::unix::fs::MetadataExt;
+
+fn remove_file(path: &PathBuf, mut output: &File) -> () {
+    // std::fs::remove_file(&path).ok();
+    output.write_all(b"Removed: ").unwrap();
+    output.write_all((&path.to_str().unwrap()).as_ref()).unwrap();
+    output.write_all(b"\n").unwrap();
+}
+
+fn view_png(start : &str, mut output: &File) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
-
-    let mut jpeg_set: HashSet<u64> = HashSet::new();
+    let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
+    let mut mov_set: HashSet<FileDataMov> = HashSet::new();
 
     for entry in glob(&(format!("{}/**/*", start)) as &str).expect("Failed to read glob pattern") {
-        
         let path: PathBuf = entry.unwrap();
         let extension = path.extension().unwrap_or_default().to_str().unwrap();
 
-
         match extension {
-            "png" => ({
-                let file: File = File::open(&path).expect("Failed to read line");
+            "png" => {
+                let file: File = File::open(&path).expect("Failed to open file");
         
                 let mut reader: BufReader<File>  = BufReader::new(file);
                 let mut buffer: Vec<u8> = Vec::new();
@@ -53,57 +60,38 @@ fn view_png(start : &str) -> () {
                 let vec : Vec<u8> = hasher.finalize().to_vec();
         
                 if png_set.contains(&vec) {
-                    print!("Removing {}... ", &path.to_str().unwrap());
-                    // std::fs::remove_file(&path).ok();
-                    print!("Done \n");
+                    remove_file(&path, &mut output);
                 }
                 else {
                     png_set.insert(vec);
                 }
-            }),
-            "jpg" | "jpeg" | "JPG" => ({
+            },
+            "jpg" | "jpeg" | "JPG" => {
                 let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
-                let mut hasher: DefaultHasher = DefaultHasher::new();
 
-                let value: &u64 = &file_data.hash(&mut hasher);
-
-                if jpeg_set.contains(&value) {
-                    print!("Removing {}... ", &path.to_str().unwrap());
-                    // std::fs::remove_file(&path).ok();
-                    print!("Done \n");
+                if jpeg_set.contains(&file_data) {
+                    remove_file(&path, &mut output);
                 }
                 else {
-                    jpeg_set.insert(*value);
+                    jpeg_set.insert(file_data);
                 }
-            }),
+            },
+            "MOV" => {
+                let file: File = File::open(&path.to_str().unwrap()).expect("Failed to open file");
+                let cap: VideoCapture = VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap();
+                let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
+
+                if mov_set.contains(&mov_data) {
+                    remove_file(&path, &mut output);
+                }
+                else {
+                    mov_set.insert(mov_data);
+                }
+            },
             _ => continue,
         }
     }
 }
-
-/*
-fn view_jpeg(start: &str, extension: &str) {
-    let mut set: HashSet<Box<String>> = HashSet::new();
-    let hasher = HasherConfig::new().to_hasher();
-
-    for entry in glob(&format!("{}/**/*.{}", start, extension) as &str).expect("Failed to read glob pattern") {
-        let path: PathBuf = entry.unwrap();
-        let name: String =String::from(path.as_path().to_str().unwrap());
-
-        let image = image::open(&path).unwrap();
-        let hash: Box<String> = Box::new(hasher.hash_image(&image).to_base64());
-
-        if set.contains(&hash) {
-            print!("Removing {}... ", name);
-            std::fs::remove_file(path).ok();
-            print!("Done \n");
-        }
-        else {
-            set.insert(hash);
-        }
-    }
-}
-*/
 
 fn main() -> std::io::Result<()> {
     let mut start_folder : String = String::new();
@@ -116,30 +104,11 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
-    // let path1: String = String::from("/mnt/3468843A6883F8BE/pictures-videos/vacations-holidays/San Francisco 2022/IMG_3226.JPG");
-    // let path2: String = String::from("/mnt/3468843A6883F8BE/pictures-videos/vacations-holidays/Cali 2022/IMG_3226.JPG");
+    fs::remove_file("output.txt").expect("could not remove");
+    let mut out_file: File = File::create("output.txt").unwrap();
 
-    // let path1: String = String::from("folder1/Screenshot from 2021-09-02 22-25-30.png");
-    // let path2: String = String::from("folder1/Screenshot from 2021-10-17 23-22-40.png");
-
-    // let image1 = image::open(path1).unwrap();
-    // let image2 = image::open(path2).unwrap();
-
-    // let hasher = HasherConfig::new().to_hasher();
-
-    // let hash1 = hasher.hash_image(&image1);
-    // let hash2 = hasher.hash_image(&image2);
-
-    // println!("Image1 hash: {}", hash1.to_base64());
-    // println!("Image2 hash: {}", hash2.to_base64());
-
-    // println!("Hamming Distance: {}", hash1.dist(&hash2));   
-
-    view_png(&start_folder as &str);
-    // view_jpeg(&start_folder as &str, "JPG");
-    // view_jpeg(&start_folder as &str, "jpeg");
-    // view_jpeg(&start_folder as &str, "jpg");
-    
+    view_png(&start_folder as &str, &mut out_file);
 
     Ok(())
-} 
+}
+

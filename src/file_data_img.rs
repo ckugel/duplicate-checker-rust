@@ -2,8 +2,9 @@ use std::hash::{Hash, Hasher};
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
-use exif::{Exif, Field, In, Reader, Tag};
+use exif::{Exif, In, Reader, Tag};
 
+#[derive(Eq)]
 pub(crate) struct FileDataImg {
     size: u64,
     dimensions: [u16; 2],
@@ -25,7 +26,7 @@ impl FileDataImg {
         };
     }
 
-    fn get_as_string(exif:&Exif, tag: Tag) -> Option<String> {
+    fn get_as_string(exif: &Exif, tag: Tag) -> Option<String> {
         let field = exif.get_field(tag, In::PRIMARY);
         return match field {
             None => {
@@ -35,7 +36,6 @@ impl FileDataImg {
                 Some(field.unwrap().display_value().with_unit(exif).to_string().to_string())
             }
         }
-
     }
 
     fn parse_from_only_space(as_a_string: &String) -> &str {
@@ -44,7 +44,7 @@ impl FileDataImg {
 
     fn get_exposure_time(exif: &Exif) -> u32 {
         let as_a_string: String = Self::get_as_string(exif, Tag::ExposureTime).unwrap_or(String::from("/1 "));
-        return u32::from_str(&as_a_string[as_a_string.find('/').unwrap() + 1.. as_a_string.rfind(' ').unwrap()]).unwrap();
+        return u32::from_str(&as_a_string[as_a_string.find('/').unwrap() + 1..as_a_string.rfind(' ').unwrap()]).unwrap();
     }
 
     fn get_width(exif: &Exif) -> u16 {
@@ -73,8 +73,9 @@ impl FileDataImg {
 
         return arr;
     }
-
-    pub fn hash<H: Hasher>(&self, state: &mut H) -> u64 {
+}
+impl Hash for FileDataImg {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.size);
         state.write_u16(self.dimensions[0]);
         state.write_u16(self.dimensions[1]);
@@ -82,7 +83,7 @@ impl FileDataImg {
             state.write_u16(item);
         }
         state.write_u32(self.exposure_time);
-        return state.finish();
+        state.finish();
     }
 }
 
