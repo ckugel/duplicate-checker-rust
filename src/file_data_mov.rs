@@ -9,20 +9,19 @@ pub(crate) struct FileDataMov {
     size: u64,
     frame_hashes_size: usize,
     frame_hashes: [u64; 5],
-    cap: Box<VideoCapture>,
     // hashed: u64 = 0,
 }
 
 impl FileDataMov {
-    pub fn new(size: u64, cap: Box<VideoCapture>) -> Self {
-        let mut thing = FileDataMov {size, frame_hashes_size: 0, frame_hashes: [0; 5], cap};
-        thing.compute_frames();
+    pub fn new(size: u64, cap: VideoCapture) -> Self {
+        let mut thing = FileDataMov {size, frame_hashes_size: 0, frame_hashes: [0; 5]};
+        thing.compute_frames(cap);
         return thing;
     }
 
     pub fn compute_frame(&mut self, mat: Mat) -> u64{
         let mut hasher: DefaultHasher = DefaultHasher::new();
-        let data_bytes: &[u8] = &mat.data_bytes().unwrap()[0..80];
+        let data_bytes: &[u8] = &mat.data_bytes().unwrap()[0..96];
         let mut index = 0;
         while index < data_bytes.len() {
             hasher.write_u128(u128::from_be_bytes(data_bytes[index..index+16].try_into().unwrap()));
@@ -32,10 +31,10 @@ impl FileDataMov {
         return hasher.finish();
     }
 
-    pub fn compute_frames(&mut self) {
-        while &self.frame_hashes_size < &self.frame_hashes.len() && *&self.cap.is_opened().unwrap() {
+    pub fn compute_frames(&mut self, mut cap: VideoCapture) {
+        while &self.frame_hashes_size < &self.frame_hashes.len() && *&cap.is_opened().unwrap() {
             let mut frame: Mat = Mat::default();
-            self.cap.read(&mut frame).expect("Can't read frame");
+            cap.read(&mut frame).expect("Can't read frame");
             self.frame_hashes[self.frame_hashes_size % self.frame_hashes.len()] = self.compute_frame(frame);
             self.frame_hashes_size += 1;
         }

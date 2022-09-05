@@ -78,7 +78,7 @@ fn view_png(start : &str, mut output: &File) -> () {
             },
             "MOV" => {
                 let file: File = File::open(&path.to_str().unwrap()).expect("Failed to open file");
-                let cap: Box<VideoCapture> = Box::new(VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap());
+                let cap: VideoCapture = VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap();
                 let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
 
                 if mov_set.contains(&mov_data) {
@@ -104,10 +104,10 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
+    fs::remove_file("output.txt").expect("could not remove");
     let mut out_file: File = File::create("output.txt").unwrap();
 
     view_png(&start_folder as &str, &mut out_file);
-    
 
     Ok(())
 }
