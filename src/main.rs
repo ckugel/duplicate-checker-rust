@@ -1,7 +1,15 @@
+#![feature(test)]
+
 mod file_data_img;
+mod file_data_mov;
+
 use file_data_img::FileDataImg;
 
 extern crate image;
+extern crate opencv;
+extern crate test;
+
+use opencv::prelude::*;
 
 use std::collections::hash_set::HashSet;
 
@@ -20,20 +28,25 @@ use std::path::PathBuf;
 
 use std::io::BufReader;
 
+use opencv::videoio;
+
+use opencv::videoio::VideoCapture;
+use crate::file_data_mov::FileDataMov;
+
+use std::os::unix::fs::MetadataExt;
+
 fn view_png(start : &str) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
     let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
-    let mut mov_set: HashSet<u64> = HashSet::new();
+    let mut mov_set: HashSet<FileDataMov> = HashSet::new();
 
     for entry in glob(&(format!("{}/**/*", start)) as &str).expect("Failed to read glob pattern") {
-        
         let path: PathBuf = entry.unwrap();
         let extension = path.extension().unwrap_or_default().to_str().unwrap();
 
-
         match extension {
             "png" => ({
-                let file: File = File::open(&path).expect("Failed to read line");
+                let file: File = File::open(&path).expect("Failed to open file");
         
                 let mut reader: BufReader<File>  = BufReader::new(file);
                 let mut buffer: Vec<u8> = Vec::new();
@@ -66,7 +79,19 @@ fn view_png(start : &str) -> () {
                 }
             }),
             "MOV" => ({
+                let file: File = File::open(&path.to_str().unwrap()).expect("Failed to open file");
+                let cap: Box<VideoCapture> = Box::new(VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap());
+                println!("{}", &path.to_str().unwrap());
+                let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
 
+                if mov_set.contains(&mov_data) {
+                    print!("Removing {}... ", &path.to_str().unwrap());
+                    // std::fs::remove_file(&path).ok();
+                    print!("Done \n");
+                }
+                else {
+                    mov_set.insert(mov_data);
+                }
             }),
             _ => continue,
         }
@@ -88,4 +113,27 @@ fn main() -> std::io::Result<()> {
     
 
     Ok(())
-} 
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use test::Bencher;
+    use test::black_box;
+    use opencv::videoio;
+    use opencv::videoio::{VideoCapture, VideoCaptureTraitConst};
+    use crate::FileDataMov;
+
+    const FILES: [&str; 3] = ["./folder1/HarryPotter/IMG_3693.MOV", "./folder1/HarryPotter/IMG_3698.MOV", "./folder1/HarryPotter/IMG_3700.MOV"];
+
+    #[bench]
+    fn bench(bencher: &mut Bencher) {
+         for i in 0..3 {
+             let file: File = File::open(FILES[i]).unwrap();
+             let cap: Box<VideoCapture> = Box::new(VideoCapture::from_file(FILES[i], videoio::CAP_ANY).unwrap());
+             let mut data = FileDataMov::new(file.metadata().unwrap().len(), cap);
+             bencher.iter(|| data.compute_frames_long());
+         }
+    }
+}
+
