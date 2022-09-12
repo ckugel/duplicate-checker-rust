@@ -5,6 +5,7 @@ use opencv::core::Mat;
 
 use opencv::videoio::VideoCapture;
 
+#[derive(Eq)]
 pub(crate) struct FileDataMov {
     size: u64,
     frame_hashes_size: usize,
@@ -56,15 +57,9 @@ impl PartialEq<Self> for FileDataMov {
         if self.frame_hashes_size != other.frame_hashes_size {
             return false;
         }
-        unsafe {
-            let obj1: *const u64 = self.frame_hashes.as_ptr();
-            let obj2: *const u64 = self.frame_hashes.as_ptr();
-            for i in 0..self.frame_hashes_size {
-                visitor[(obj1.offset(i as isize) != obj2.offset(i as isize)) as usize] = false;
-            }
+        for i in 0..self.frame_hashes_size {
+            visitor[(self.frame_hashes[i] == other.frame_hashes[i]) as usize];
         }
         return visitor[0];
     }
 }
-
-impl Eq for FileDataMov {}

@@ -1,6 +1,7 @@
 mod file_data_img;
 mod file_data_mov;
 
+use std::collections::hash_map::DefaultHasher;
 use file_data_img::FileDataImg;
 
 extern crate image;
@@ -17,6 +18,7 @@ use std::vec::Vec;
 use std::fs::File;
 use std::io::prelude::*;
 use std::fs;
+use std::hash::{Hash, Hasher};
 
 use glob::glob;
 use std::path::PathBuf;
@@ -77,9 +79,25 @@ fn view_png(start : &str, mut output: &File) -> () {
                 }
             },
             "MOV" => {
-                let file: File = File::open(&path.to_str().unwrap()).expect("Failed to open file");
+                let file: File = File::open(&path.to_str().unwrap()).unwrap();
                 let cap: VideoCapture = VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap();
                 let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
+
+                if path.to_str().unwrap().contains("IMG_E4368999999999999") {
+                    let mut hasher: DefaultHasher = DefaultHasher::new();
+                    mov_data.hash(&mut hasher);
+                    output.write_all(b"copy: ").unwrap();
+                    output.write_all((&hasher.finish().to_string()).as_ref()).unwrap();
+                    output.write_all(b"\n").unwrap();
+                }
+
+                else if path.to_str().unwrap().contains("IMG_E4368") {
+                    let mut hasher: DefaultHasher = DefaultHasher::new();
+                    mov_data.hash(&mut hasher);
+                    output.write_all(b"normal: ").unwrap();
+                    output.write_all((&hasher.finish().to_string()).as_ref()).unwrap();
+                    output.write_all(b"\n").unwrap();
+                }
 
                 if mov_set.contains(&mov_data) {
                     remove_file(&path, &mut output);
@@ -104,7 +122,7 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
-    fs::remove_file("output.txt").expect("could not remove");
+    fs::remove_file("output.txt").unwrap_or_default();
     let mut out_file: File = File::create("output.txt").unwrap();
 
     view_png(&start_folder as &str, &mut out_file);
