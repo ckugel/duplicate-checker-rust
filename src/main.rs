@@ -1,7 +1,5 @@
 mod file_data_img;
 mod file_data_mov;
-
-use std::collections::hash_map::DefaultHasher;
 use file_data_img::FileDataImg;
 
 extern crate image;
@@ -18,7 +16,6 @@ use std::vec::Vec;
 use std::fs::File;
 use std::io::prelude::*;
 use std::fs;
-use std::hash::{Hash, Hasher};
 
 use glob::glob;
 use std::path::PathBuf;
@@ -32,14 +29,8 @@ use crate::file_data_mov::FileDataMov;
 
 use std::os::unix::fs::MetadataExt;
 
-fn remove_file(path: &PathBuf, mut output: &File) -> () {
-    // std::fs::remove_file(&path).ok();
-    output.write_all(b"Removed: ").unwrap();
-    output.write_all((&path.to_str().unwrap()).as_ref()).unwrap();
-    output.write_all(b"\n").unwrap();
-}
 
-fn view_png(start : &str, mut output: &File) -> () {
+fn view_png(start : &str) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
     let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
     let mut mov_set: HashSet<FileDataMov> = HashSet::new();
@@ -62,7 +53,7 @@ fn view_png(start : &str, mut output: &File) -> () {
                 let vec : Vec<u8> = hasher.finalize().to_vec();
         
                 if png_set.contains(&vec) {
-                    remove_file(&path, &mut output);
+                    fs::remove_file(&path).ok();
                 }
                 else {
                     png_set.insert(vec);
@@ -72,7 +63,7 @@ fn view_png(start : &str, mut output: &File) -> () {
                 let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
 
                 if jpeg_set.contains(&file_data) {
-                    remove_file(&path, &mut output);
+                    fs::remove_file(&path).ok();
                 }
                 else {
                     jpeg_set.insert(file_data);
@@ -83,24 +74,8 @@ fn view_png(start : &str, mut output: &File) -> () {
                 let cap: VideoCapture = VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap();
                 let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
 
-                if path.to_str().unwrap().contains("IMG_E4368999999999999") {
-                    let mut hasher: DefaultHasher = DefaultHasher::new();
-                    mov_data.hash(&mut hasher);
-                    output.write_all(b"copy: ").unwrap();
-                    output.write_all((&hasher.finish().to_string()).as_ref()).unwrap();
-                    output.write_all(b"\n").unwrap();
-                }
-
-                else if path.to_str().unwrap().contains("IMG_E4368") {
-                    let mut hasher: DefaultHasher = DefaultHasher::new();
-                    mov_data.hash(&mut hasher);
-                    output.write_all(b"normal: ").unwrap();
-                    output.write_all((&hasher.finish().to_string()).as_ref()).unwrap();
-                    output.write_all(b"\n").unwrap();
-                }
-
                 if mov_set.contains(&mov_data) {
-                    remove_file(&path, &mut output);
+                    fs::remove_file(&path).ok();
                 }
                 else {
                     mov_set.insert(mov_data);
@@ -122,10 +97,7 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
-    fs::remove_file("output.txt").unwrap_or_default();
-    let mut out_file: File = File::create("output.txt").unwrap();
-
-    view_png(&start_folder as &str, &mut out_file);
+    view_png(&start_folder as &str);
 
     Ok(())
 }

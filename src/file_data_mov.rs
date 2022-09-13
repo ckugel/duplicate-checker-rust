@@ -10,7 +10,6 @@ pub(crate) struct FileDataMov {
     size: u64,
     frame_hashes_size: usize,
     frame_hashes: [u64; 5],
-    // hashed: u64 = 0,
 }
 
 impl FileDataMov {
