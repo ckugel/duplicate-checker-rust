@@ -2,7 +2,8 @@ use std::hash::{Hash, Hasher};
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
-use exif::{Exif, In, Reader, Tag};
+use exif::{Exif, In, Reader, Tag, Error};
+use std::time::{SystemTime};
 
 #[derive(Eq)]
 pub(crate) struct FileDataImg {
@@ -16,14 +17,26 @@ impl FileDataImg {
     pub fn new(path: &str) -> FileDataImg {
         let reader: Reader = Reader::new();
         let file: File = File::open(path).unwrap();
-        let exif: Exif = reader.read_from_container(&mut BufReader::new(&file)).unwrap();
-
-        return FileDataImg {
-            size: file.metadata().unwrap().len(),
-            dimensions: [Self::get_width(&exif), Self::get_length(&exif)],
-            created_on: Self::created_on(&exif),
-            exposure_time: Self::get_exposure_time(&exif)
-        };
+        let potential: Result<Exif, Error> = reader.read_from_container(&mut BufReader::new(&file));
+        match potential {
+            Err(_error) => {
+            let current_time: u64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() >> 32;
+            return FileDataImg {
+                size: file.metadata().unwrap().len(),
+                dimensions: [current_time.try_into().unwrap(), current_time.try_into().unwrap()],
+                created_on: [current_time.try_into().unwrap(), current_time.try_into().unwrap(), current_time.try_into().unwrap(), current_time.try_into().unwrap(), current_time.try_into().unwrap(), current_time.try_into().unwrap()],
+                exposure_time: current_time.try_into().unwrap()
+            }
+        }
+        Ok(exif) => {
+            return FileDataImg {
+                size: file.metadata().unwrap().len(),
+                dimensions: [Self::get_width(&exif), Self::get_length(&exif)],
+                created_on: Self::created_on(&exif),
+                exposure_time: Self::get_exposure_time(&exif)
+                };
+            }
+        }
     }
 
     fn get_as_string(exif: &Exif, tag: Tag) -> Option<String> {

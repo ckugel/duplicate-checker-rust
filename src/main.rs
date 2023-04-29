@@ -30,7 +30,7 @@ use crate::file_data_mov::FileDataMov;
 use std::os::unix::fs::MetadataExt;
 
 
-fn view_png(start : &str) -> () {
+fn search_all_files(start : &str) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
     let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
     let mut mov_set: HashSet<FileDataMov> = HashSet::new();
@@ -53,7 +53,8 @@ fn view_png(start : &str) -> () {
                 let vec : Vec<u8> = hasher.finalize().to_vec();
         
                 if png_set.contains(&vec) {
-                    fs::remove_file(&path).ok();
+                    println!("To Remove {:?}", &path.as_os_str());
+                    // fs::remove_file(&path).ok();
                 }
                 else {
                     png_set.insert(vec);
@@ -63,7 +64,8 @@ fn view_png(start : &str) -> () {
                 let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
 
                 if jpeg_set.contains(&file_data) {
-                    fs::remove_file(&path).ok();
+                    println!("To Remove {:?}", &path.as_os_str());
+                    // fs::remove_file(&path).ok();
                 }
                 else {
                     jpeg_set.insert(file_data);
@@ -71,11 +73,12 @@ fn view_png(start : &str) -> () {
             },
             "MOV" => {
                 let file: File = File::open(&path.to_str().unwrap()).unwrap();
-                let cap: VideoCapture = VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_ANY).unwrap();
+                let cap: VideoCapture = VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_FFMPEG).unwrap();
                 let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
 
                 if mov_set.contains(&mov_data) {
-                    fs::remove_file(&path).ok();
+                    println!("To Remove {:?}", &path.as_os_str());
+                    // fs::remove_file(&path).ok();
                 }
                 else {
                     mov_set.insert(mov_data);
@@ -97,7 +100,7 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
-    view_png(&start_folder as &str);
+    search_all_files(&start_folder as &str);
 
     Ok(())
 }
