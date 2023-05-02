@@ -21,6 +21,7 @@ impl FileDataImg {
         match potential {
             Err(_error) => {
             let current_time: u64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() >> 32;
+            // if you cannot read the exif data, then fill all of the fields with the current time
             return FileDataImg {
                 size: file.metadata().unwrap().len(),
                 dimensions: [current_time.try_into().unwrap(), current_time.try_into().unwrap()],
@@ -57,17 +58,33 @@ impl FileDataImg {
 
     fn get_exposure_time(exif: &Exif) -> u32 {
         let as_a_string: String = Self::get_as_string(exif, Tag::ExposureTime).unwrap_or(String::from("/1 "));
-        return u32::from_str(&as_a_string[as_a_string.find('/').unwrap() + 1..as_a_string.rfind(' ').unwrap()]).unwrap();
+        let slash_location: Option<usize> = as_a_string.find('/');
+        let space_location: Option<usize> = as_a_string.find(' ');
+
+        if slash_location.is_none() || space_location.is_none() {
+            return 1;
+        }
+        else {
+            match u32::from_str(&as_a_string[slash_location.unwrap() + 1..space_location.unwrap()]) {
+                Ok(n) => {
+                    return n;
+                }
+                Err(_error) => {
+                    return 1;
+                }
+                
+            }
+        }
     }
 
     fn get_width(exif: &Exif) -> u16 {
-        let as_a_string: String = Self::get_as_string(exif, Tag::PixelXDimension).unwrap_or(String::from(" 1048"));
-        return u16::from_str(Self::parse_from_only_space(&as_a_string)).unwrap();
+        let as_a_string: String = Self::get_as_string(exif, Tag::PixelXDimension).unwrap_or(String::from("1048"));
+        return u16::from_str(Self::parse_from_only_space(&as_a_string)).unwrap_or(1048);
     }
 
     fn get_length(exif: &Exif) -> u16 {
-        let as_a_string: String = Self::get_as_string(exif, Tag::PixelYDimension).unwrap_or(String::from(" 2048"));
-        return u16::from_str(Self::parse_from_only_space(&as_a_string)).unwrap();
+        let as_a_string: String = Self::get_as_string(exif, Tag::PixelYDimension).unwrap_or(String::from("2048"));
+        return u16::from_str(Self::parse_from_only_space(&as_a_string)).unwrap_or(2048);
     }
 
     fn created_on(exif: &Exif) -> [u16; 6] {
