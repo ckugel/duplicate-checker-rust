@@ -5,7 +5,6 @@ use file_data_img::FileDataImg;
 extern crate image;
 extern crate opencv;
 
-use core::num;
 use std::collections::HashMap;
 use std::collections::hash_set::HashSet;
 
@@ -32,11 +31,11 @@ use crate::file_data_mov::FileDataMov;
 use std::os::unix::fs::MetadataExt;
 
 // when true we output the files to be removed instead of removing them
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 // fragile folders is a feature where if a duplicat file is found it will delete the one in the fragile folder as opposed to deleting the one it saw first
 const USE_FRAGILE_FOLDERS: bool = true;
 
-fn search_all_files(start : &str) -> () {
+fn search_all_files(start : &str, fragile_folders: Vec<String>) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
     let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
     let mut mov_set: HashSet<FileDataMov> = HashSet::new();
@@ -132,17 +131,19 @@ fn search_all_files(start : &str) -> () {
 fn main() -> std::io::Result<()> {
     let mut start_folder : String = String::new();
 
+    let fragile_folders: Vec<String>;
+
     // rust's compiler not generating any of this in asm if based on the constant is amazing
     if USE_FRAGILE_FOLDERS {
         // get the number of fragile folders that the user will pass in
-        let input_was_valid: bool = false;
-        let num_fragile_folders: u16;
+        let mut input_was_valid: bool = false;
+        let mut num_fragile_folders: u16 = 0;
 
-            while (!input_was_valid) {
+            while !input_was_valid {
             print!("\nHow many folders would you like to declare fragile? (0 for none)\n");
-            let mut numBuf: String = String::new();
-            stdin().read_line(&mut numBuf).expect("Failed to read line");
-            match numBuf::parse<u16>() {
+            let mut num_buf: String = String::new();
+            stdin().read_line(&mut num_buf).expect("Failed to read line");
+            match num_buf.parse::<u16>() {
                 Ok(value) => {
                     input_was_valid = true;
                     num_fragile_folders = value;
@@ -154,15 +155,19 @@ fn main() -> std::io::Result<()> {
         }
 
         // get the fragile folders from the user
-        let mut fragile_folders: Vec<String> = Vec::new();
-        for i in 0..num_fragile_folders {
+        let mut folders: Vec<String> = Vec::new();
+        for _ in 0..num_fragile_folders {
             println!("pass in a fragile folder: ");
             let mut fragile_folder: String = String::new();
             stdin().read_line(&mut fragile_folder).expect("Failed to read line");
             fragile_folder.truncate(fragile_folder.len() - 1);
             fs::canonicalize(&fragile_folder).ok();
-            fragile_folders.push(fragile_folder);
+            folders.push(fragile_folder);
         }
+        fragile_folders = folders;
+    }
+    else {
+        fragile_folders = Vec::new();
     }
 
     print!("\nEnter a start folder: ");
@@ -173,7 +178,7 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
-    search_all_files(&start_folder as &str);
+    search_all_files(&start_folder as &str, fragile_folders);
 
     Ok(())
 }
