@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gitignore = "1.0.7"
+gitignore = "1.0.8"
 glob = "0.3.0"
 sha2 = "0.10.2"
 kamadak-exif = "0.5.4"

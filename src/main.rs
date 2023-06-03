@@ -5,6 +5,7 @@ use file_data_img::FileDataImg;
 extern crate image;
 extern crate opencv;
 
+use core::num;
 use std::collections::HashMap;
 use std::collections::hash_set::HashSet;
 
@@ -32,6 +33,8 @@ use std::os::unix::fs::MetadataExt;
 
 // when true we output the files to be removed instead of removing them
 const DEBUG: bool = false;
+// fragile folders is a feature where if a duplicat file is found it will delete the one in the fragile folder as opposed to deleting the one it saw first
+const USE_FRAGILE_FOLDERS: bool = true;
 
 fn search_all_files(start : &str) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
@@ -129,7 +132,40 @@ fn search_all_files(start : &str) -> () {
 fn main() -> std::io::Result<()> {
     let mut start_folder : String = String::new();
 
-    println!("Enter a start folder: ");
+    // rust's compiler not generating any of this in asm if based on the constant is amazing
+    if USE_FRAGILE_FOLDERS {
+        // get the number of fragile folders that the user will pass in
+        let input_was_valid: bool = false;
+        let num_fragile_folders: u16;
+
+            while (!input_was_valid) {
+            print!("\nHow many folders would you like to declare fragile? (0 for none)\n");
+            let mut numBuf: String = String::new();
+            stdin().read_line(&mut numBuf).expect("Failed to read line");
+            match numBuf::parse<u16>() {
+                Ok(value) => {
+                    input_was_valid = true;
+                    num_fragile_folders = value;
+                }
+                Err(_) => {
+                    print!("\nnot a valid input, input needs to be a number\n");
+                }
+            }
+        }
+
+        // get the fragile folders from the user
+        let mut fragile_folders: Vec<String> = Vec::new();
+        for i in 0..num_fragile_folders {
+            println!("pass in a fragile folder: ");
+            let mut fragile_folder: String = String::new();
+            stdin().read_line(&mut fragile_folder).expect("Failed to read line");
+            fragile_folder.truncate(fragile_folder.len() - 1);
+            fs::canonicalize(&fragile_folder).ok();
+            fragile_folders.push(fragile_folder);
+        }
+    }
+
+    print!("\nEnter a start folder: ");
     
     stdin().read_line(&mut start_folder).expect("Failed to read line");
 
