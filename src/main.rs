@@ -1,12 +1,20 @@
 mod file_data_img;
 mod file_data_mov;
-use file_data_img::FileDataImg;
+mod deletion_manager;
+mod duplicate_package;
+
+use crate::file_data_mov::FileDataMov;
+use crate::file_data_img::FileDataImg;
+use crate::deletion_manager::DeletionManager;
+use crate::duplicate_package::DuplicatePackage;
 
 extern crate image;
 extern crate opencv;
 
 use std::collections::HashMap;
 use std::collections::hash_set::HashSet;
+
+use std::{thread, time};
 
 use sha2::Sha512;
 use sha2::Digest;
@@ -26,16 +34,38 @@ use std::io::BufReader;
 use opencv::videoio;
 
 use opencv::videoio::VideoCapture;
-use crate::file_data_mov::FileDataMov;
 
 use std::os::unix::fs::MetadataExt;
 
 // when true we output the files to be removed instead of removing them
 const DEBUG: bool = true;
-// fragile folders is a feature where if a duplicat file is found it will delete the one in the fragile folder as opposed to deleting the one it saw first
+// fragile folders is a feature where if a duplicate file is found it will delete the one in the fragile folder as opposed to deleting the one it saw first
 const USE_FRAGILE_FOLDERS: bool = true;
 
-fn search_all_files(start : &str, fragile_folders: Vec<String>) -> () {
+fn deletion_manager_loop(mut manager: Box<DeletionManager>, fragile_folders: Vec<String>) -> () {
+    loop {
+        if !manager.is_empty() {
+            let package: DuplicatePackage = manager.pop_most_recent();
+            if DEBUG {
+                println!("{:?} is the same as {:?}", package.get_file_one(), package.get_file_two());
+            }
+            else {
+                if USE_FRAGILE_FOLDERS {
+
+                }
+                else {
+
+                }
+            }
+
+        }
+        else {
+            thread::sleep(time::Duration::from_millis(1));
+        }
+    }
+}
+
+fn search_all_files(start : &str, manager: Box<DeletionManager>) -> () {
     let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
     let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
     let mut mov_set: HashSet<FileDataMov> = HashSet::new();
@@ -83,12 +113,15 @@ fn search_all_files(start : &str, fragile_folders: Vec<String>) -> () {
                 let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
 
                 if DEBUG {
-                    let result: Option<&String> = jpeg_map.get(&file_data);
-                    if result.is_some() {
-                        println!("{:?} is the same as {:?}", &path.as_os_str(), result.unwrap());
-                    }
-                    else {
-                        jpeg_map.insert(file_data, path.to_str().unwrap().to_string());
+                    match jpeg_map.get(&file_data) {
+                        Some(result) => {
+                            println!("{:?} is the same as {:?}", &path.as_os_str(), result)
+                        }
+                        _ => {
+                            // we ignore the results of insert because we already check if the key is present in the map. 
+                            //TODO: Look into if this code could be replaced with a match on the insert call
+                            jpeg_map.insert(file_data, path.to_str().unwrap().to_string());
+                        }
                     }
                 }
                 else {
@@ -106,12 +139,15 @@ fn search_all_files(start : &str, fragile_folders: Vec<String>) -> () {
                 let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
 
                 if DEBUG {
-                    let result: Option<&String> = mov_map.get(&mov_data);
-                    if result.is_some() {
-                        println!("{:?} is the same as {:?}", &path.as_os_str(), result.unwrap());
-                    }
-                    else {
-                        mov_map.insert(mov_data, path.to_str().unwrap().to_string());
+                    match mov_map.get(&mov_data) {
+                        Some(result) => {
+                            println!("{:?} is the same as {:?}", &path.as_os_str(), result)
+                        }
+                        _ => {
+                            // we ignore the results of insert because we already check if the key is present in the map. 
+                            //TODO: Look into if this code could be replaced with a match on the insert call
+                            mov_map.insert(mov_data, path.to_str().unwrap().to_string());
+                        }
                     }
                 }
                 else {
@@ -178,7 +214,12 @@ fn main() -> std::io::Result<()> {
 
     fs::canonicalize(&start_folder).ok();
 
-    search_all_files(&start_folder as &str, fragile_folders);
+    let manager: Box<DeletionManager> = Box::new(DeletionManager::new());
+
+    // in thread start
+    // deletion_manager_loop(manager, fragile_folders);
+
+    search_all_files(&start_folder as &str, manager);
 
     Ok(())
 }
