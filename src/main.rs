@@ -1,20 +1,19 @@
 mod file_data_img;
 mod file_data_mov;
-mod deletion_manager;
 mod duplicate_package;
 
 use crate::file_data_mov::FileDataMov;
 use crate::file_data_img::FileDataImg;
-use crate::deletion_manager::DeletionManager;
 use crate::duplicate_package::DuplicatePackage;
 
 extern crate image;
 extern crate opencv;
 
 use std::collections::HashMap;
-use std::collections::hash_set::HashSet;
 
+use std::thread::JoinHandle;
 use std::{thread, time};
+use std::sync::{Arc, Mutex};
 
 use sha2::Sha512;
 use sha2::Digest;
@@ -37,39 +36,44 @@ use opencv::videoio::VideoCapture;
 
 use std::os::unix::fs::MetadataExt;
 
-// when true we output the files to be removed instead of removing them
-const DEBUG: bool = true;
+type DeletionManager = Arc<Mutex<Vec<DuplicatePackage>>>;
+
 // fragile folders is a feature where if a duplicate file is found it will delete the one in the fragile folder as opposed to deleting the one it saw first
 const USE_FRAGILE_FOLDERS: bool = true;
 
-fn deletion_manager_loop(mut manager: Box<DeletionManager>, fragile_folders: Vec<String>) -> () {
+fn deletion_manager_loop(manager: DeletionManager, fragile_folders: Vec<String>, main_thread: JoinHandle<()>) -> () {
     loop {
-        if !manager.is_empty() {
-            let package: DuplicatePackage = manager.pop_most_recent();
-            if DEBUG {
-                println!("{:?} is the same as {:?}", package.get_file_one(), package.get_file_two());
+        let mut manager = manager.lock().unwrap();
+        if manager.len() > 0 {
+            let package: DuplicatePackage = manager.pop().unwrap();
+            if USE_FRAGILE_FOLDERS {
+                for folder in &fragile_folders {
+                    if package.get_file_one().contains(folder) {
+                        println!("deleting {:?}", package.get_file_one());
+                        // fs::remove_file(package.get_file_one()).ok();
+                    }
+                    if package.get_file_two().contains(folder) {
+                        println!("deleting {:?}", package.get_file_two());
+                        // fs::remove_file(package.get_file_two()).ok();
+                    }
+                }
             }
             else {
-                if USE_FRAGILE_FOLDERS {
-
-                }
-                else {
-
-                }
+                println!("deleting {:?}", package.get_file_one());
+                // fs::remove_file(package.get_file_one()).ok();
             }
-
         }
         else {
+            if main_thread.is_finished() {
+                break;
+            }
             thread::sleep(time::Duration::from_millis(1));
         }
+
     }
 }
 
-fn search_all_files(start : &str, manager: Box<DeletionManager>) -> () {
-    let mut png_set : HashSet<Vec<u8>>  = HashSet::new();
-    let mut jpeg_set: HashSet<FileDataImg> = HashSet::new();
-    let mut mov_set: HashSet<FileDataMov> = HashSet::new();
-
+fn search_all_files(start : &str, manager: DeletionManager) -> () {
     let mut png_map : HashMap<Vec<u8>, String> = HashMap::new();
     let mut jpeg_map: HashMap<FileDataImg, String> = HashMap::new();
     let mut mov_map: HashMap<FileDataMov, String> = HashMap::new();
@@ -90,46 +94,25 @@ fn search_all_files(start : &str, manager: Box<DeletionManager>) -> () {
                 let mut hasher : Sha512 = Sha512::new();
                 hasher.update(&buffer);
                 let vec : Vec<u8> = hasher.finalize().to_vec();
-        
-                if DEBUG {
-                    let result: Option<&String> = png_map.get(&vec);
-                    if result.is_some() {
-                        println!("{:?} is the same as {:?}", &path.as_os_str(), result.unwrap());
+                match png_map.get(&vec) {
+                    Some(result) => {
+                        manager.lock().unwrap().push(DuplicatePackage::new(path.to_str().unwrap().to_string(), result.to_string()));
                     }
-                    else {
+                    _ => {
                         png_map.insert(vec, path.to_str().unwrap().to_string());
-                    }
-                }
-                else {
-                    if png_set.contains(&vec) {
-                        fs::remove_file(&path).ok();
-                    }
-                    else {
-                        png_set.insert(vec);
                     }
                 }
             },
             "jpg" | "jpeg" | "JPG" => {
                 let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
-
-                if DEBUG {
-                    match jpeg_map.get(&file_data) {
-                        Some(result) => {
-                            println!("{:?} is the same as {:?}", &path.as_os_str(), result)
-                        }
-                        _ => {
-                            // we ignore the results of insert because we already check if the key is present in the map. 
-                            //TODO: Look into if this code could be replaced with a match on the insert call
-                            jpeg_map.insert(file_data, path.to_str().unwrap().to_string());
-                        }
+                match jpeg_map.get(&file_data) {
+                    Some(result) => {
+                        manager.lock().unwrap().push(DuplicatePackage::new(path.to_str().unwrap().to_string(), result.to_string()));
                     }
-                }
-                else {
-                    if jpeg_set.contains(&file_data) {
-                        fs::remove_file(&path).ok();
-                    }
-                    else {
-                        jpeg_set.insert(file_data);
+                    _ => {
+                        // we ignore the results of insert because we already check if the key is present in the map. 
+                        //TODO: Look into if this code could be replaced with a match on the insert call
+                        jpeg_map.insert(file_data, path.to_str().unwrap().to_string());
                     }
                 }
             },
@@ -138,24 +121,14 @@ fn search_all_files(start : &str, manager: Box<DeletionManager>) -> () {
                 let cap: VideoCapture = VideoCapture::from_file(&path.to_str().unwrap(), videoio::CAP_FFMPEG).unwrap();
                 let mov_data: FileDataMov = FileDataMov::new(file.metadata().unwrap().size(), cap);
 
-                if DEBUG {
-                    match mov_map.get(&mov_data) {
-                        Some(result) => {
-                            println!("{:?} is the same as {:?}", &path.as_os_str(), result)
-                        }
-                        _ => {
-                            // we ignore the results of insert because we already check if the key is present in the map. 
-                            //TODO: Look into if this code could be replaced with a match on the insert call
-                            mov_map.insert(mov_data, path.to_str().unwrap().to_string());
-                        }
+                match mov_map.get(&mov_data) {
+                    Some(result) => {
+                        manager.lock().unwrap().push(DuplicatePackage::new(path.to_str().unwrap().to_string(), result.to_string()));
                     }
-                }
-                else {
-                    if mov_set.contains(&mov_data) {
-                        fs::remove_file(&path).ok();
-                    }
-                    else {
-                        mov_set.insert(mov_data);
+                    _ => {
+                        // we ignore the results of insert because we already check if the key is present in the map. 
+                        //TODO: Look into if this code could be replaced with a match on the insert call
+                        mov_map.insert(mov_data, path.to_str().unwrap().to_string());
                     }
                 }
             },
@@ -175,10 +148,11 @@ fn main() -> std::io::Result<()> {
         let mut input_was_valid: bool = false;
         let mut num_fragile_folders: u16 = 0;
 
-            while !input_was_valid {
+        while !input_was_valid {
             print!("\nHow many folders would you like to declare fragile? (0 for none)\n");
             let mut num_buf: String = String::new();
             stdin().read_line(&mut num_buf).expect("Failed to read line");
+            num_buf.truncate(num_buf.len() - 1);
             match num_buf.parse::<u16>() {
                 Ok(value) => {
                     input_was_valid = true;
@@ -193,10 +167,12 @@ fn main() -> std::io::Result<()> {
         // get the fragile folders from the user
         let mut folders: Vec<String> = Vec::new();
         for _ in 0..num_fragile_folders {
-            println!("pass in a fragile folder: ");
+            /*println!("pass in a fragile folder: ");
             let mut fragile_folder: String = String::new();
             stdin().read_line(&mut fragile_folder).expect("Failed to read line");
             fragile_folder.truncate(fragile_folder.len() - 1);
+            */
+            let fragile_folder: String = String::from("/var/mnt/bigssd/testing/fragile-boy");
             fs::canonicalize(&fragile_folder).ok();
             folders.push(fragile_folder);
         }
@@ -206,20 +182,26 @@ fn main() -> std::io::Result<()> {
         fragile_folders = Vec::new();
     }
 
-    print!("\nEnter a start folder: ");
+    let manager: DeletionManager = Arc::new(Mutex::new(Vec::new()));
+    let manager_copy: DeletionManager = manager.clone();
+
+    println!("\nEnter a start folder: ");
     
-    stdin().read_line(&mut start_folder).expect("Failed to read line");
+    /* stdin().read_line(&mut start_folder).expect("Failed to read line");
 
     start_folder.truncate(start_folder.len() - 1);
+    */
 
+    start_folder = String::from("/var/mnt/bigssd/testing");
     fs::canonicalize(&start_folder).ok();
 
-    let manager: Box<DeletionManager> = Box::new(DeletionManager::new());
+    let handle = thread::spawn(
+        move || {
+            search_all_files(&start_folder as &str, manager);
+        }
+    );
 
-    // in thread start
-    // deletion_manager_loop(manager, fragile_folders);
-
-    search_all_files(&start_folder as &str, manager);
+    deletion_manager_loop(manager_copy, fragile_folders, handle);
 
     Ok(())
 }
