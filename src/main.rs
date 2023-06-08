@@ -46,13 +46,12 @@ fn deletion_queue_manager(to_delete: DeletionManager, manager_thread: JoinHandle
         let mut to_delete = to_delete.lock().unwrap();
         if to_delete.len() > 0 {
             let package: DuplicatePackage = to_delete.pop().unwrap();
-            println!("Would you like to delete (1) '{:?}' or (2) '{:?}'", package.get_file_one(), package.get_file_two());
 
             let mut input_was_valid: bool = false;
             let mut file_num: u8 = 1;
     
             while !input_was_valid {
-                print!("\nHow many folders would you like to declare fragile? (0 for none)\n");
+                println!("Would you like to delete (1) '{:?}' or (2) '{:?}'", package.get_file_one(), package.get_file_two());
                 let mut num_buf: String = String::new();
                 stdin().read_line(&mut num_buf).expect("Failed to read line");
                 num_buf.truncate(num_buf.len() - 1);
@@ -218,12 +217,10 @@ fn main() -> std::io::Result<()> {
         // get the fragile folders from the user
         let mut folders: Vec<String> = Vec::new();
         for _ in 0..num_fragile_folders {
-            /*println!("pass in a fragile folder: ");
+            println!("pass in a fragile folder: ");
             let mut fragile_folder: String = String::new();
             stdin().read_line(&mut fragile_folder).expect("Failed to read line");
             fragile_folder.truncate(fragile_folder.len() - 1);
-            */
-            let fragile_folder: String = String::from("/var/mnt/bigssd/testing/fragile-boy");
             fs::canonicalize(&fragile_folder).ok();
             folders.push(fragile_folder);
         }
@@ -240,13 +237,8 @@ fn main() -> std::io::Result<()> {
     let deletion_queue_copy: DeletionManager = deletion_queue.clone();
 
     println!("\nEnter a start folder: ");
-    
-    /* stdin().read_line(&mut start_folder).expect("Failed to read line");
-
+    stdin().read_line(&mut start_folder).expect("Failed to read line");
     start_folder.truncate(start_folder.len() - 1);
-    */
-
-    start_folder = String::from("/var/mnt/bigssd/testing");
     fs::canonicalize(&start_folder).ok();
 
     let handle = thread::spawn(
