@@ -129,3 +129,14 @@ impl PartialEq<Self> for FileDataImg {
         return visitor[0];
     }
 }
+
+impl Clone for FileDataImg {
+    fn clone(&self) -> Self {
+        return FileDataImg {
+            size: self.size,
+            dimensions: self.dimensions,
+            created_on: self.created_on,
+            exposure_time: self.exposure_time
+        }
+    }
+}
