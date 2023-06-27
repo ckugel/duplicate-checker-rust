@@ -1,19 +1,15 @@
 mod file_data_img;
 mod file_data_mov;
-mod duplicate_package;
 
 use crate::file_data_mov::FileDataMov;
 use crate::file_data_img::FileDataImg;
-use crate::duplicate_package::DuplicatePackage;
 
 extern crate image;
 extern crate opencv;
 
 use std::collections::HashMap;
 
-use std::thread::JoinHandle;
-use std::{thread, time};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use sha2::Sha512;
 use sha2::Digest;
@@ -36,98 +32,10 @@ use opencv::videoio::VideoCapture;
 
 use std::os::unix::fs::MetadataExt;
 
-type DeletionManager = Arc<Mutex<Vec<DuplicatePackage>>>;
-
 // fragile folders is a feature where if a duplicate file is found it will delete the one in the fragile folder as opposed to deleting the one it saw first
 const USE_FRAGILE_FOLDERS: bool = true;
 
-fn deletion_queue_manager(to_delete: DeletionManager, manager_thread: JoinHandle<()>) -> () {
-    loop {
-        let mut to_delete = to_delete.lock().unwrap();
-        if to_delete.len() > 0 {
-            let package: DuplicatePackage = to_delete.pop().unwrap();
-
-            let mut input_was_valid: bool = false;
-            let mut file_num: u8 = 1;
-    
-            while !input_was_valid {
-                println!("Would you like to delete (1) '{:?}' or (2) '{:?}'", package.get_file_one(), package.get_file_two());
-                let mut num_buf: String = String::new();
-                stdin().read_line(&mut num_buf).expect("Failed to read line");
-                num_buf.truncate(num_buf.len() - 1);
-                match num_buf.parse::<u8>() {
-                    Ok(value) => {
-                        input_was_valid = true;
-                        file_num = value;
-                    }
-                    Err(_) => {
-                        print!("\nnot a valid input, input needs to be a number\n");
-                    }
-                }
-            }
-            if file_num >= 2 {
-                println!("deleting {:?}", package.get_file_two());
-                // fs::remove_file(package.get_file_two()).ok();
-            }
-            else {
-                println!("deleting {:?}", package.get_file_one());
-                // fs::remove_file(package.get_file_one()).ok();
-            }
-        }
-        // queue is empty and the manager thread is finished, we can exit
-        else if manager_thread.is_finished() {
-            break;
-        }
-        else {
-            thread::sleep(time::Duration::from_millis(1));
-        }
-    }
-}
-
-fn deletion_manager_loop(manager: DeletionManager, fragile_folders: Vec<String>, main_thread: JoinHandle<()>, to_delete: DeletionManager) -> () {
-    loop {
-        let mut manager = manager.lock().unwrap();
-        if manager.len() > 0 {
-            let package: DuplicatePackage = manager.pop().unwrap();
-            if USE_FRAGILE_FOLDERS {
-                let mut was_removed: bool = false;
-                for folder in &fragile_folders {
-                    if package.get_file_one().contains(folder) {
-                        println!("deleting {:?}", package.get_file_one());
-                        // fs::remove_file(package.get_file_one()).ok();
-                        was_removed = true;
-                    }
-                    if package.get_file_two().contains(folder) {
-                        println!("deleting {:?}", package.get_file_two());
-                        // fs::remove_file(package.get_file_two()).ok();
-                        was_removed = true;
-                    }
-                }
-                // pair to be removed did not get removed during the fragile folder check, so we add it to the deletion queue and prompt the user
-                if !was_removed {
-                    to_delete.lock().unwrap().push(package);
-                }
-            }
-            else {
-                println!("deleting {:?}", package.get_file_one());
-                fs::remove_file(package.get_file_one()).ok();
-            }
-        }
-        else {
-            if main_thread.is_finished() {
-                break;
-            }
-            thread::sleep(time::Duration::from_millis(1));
-        }
-
-    }
-}
-
-fn search_all_files(start : &str, manager: DeletionManager) -> () {
-    let mut png_map : HashMap<Vec<u8>, String> = HashMap::new();
-    let mut jpeg_map: HashMap<FileDataImg, String> = HashMap::new();
-    let mut mov_map: HashMap<FileDataMov, String> = HashMap::new();
-
+fn search_all_files(start : &str, png_map: &mut HashMap<Vec<u8>, Mutex<Vec<String>>>, jpeg_map: &mut HashMap<FileDataImg, Mutex<Vec<String>>>, mov_map: &mut HashMap<FileDataMov, Mutex<Vec<String>>>) -> () {
     for entry in glob(&(format!("{}/**/*", start)) as &str).expect("Failed to read glob pattern") {
         let path: PathBuf = entry.unwrap();
         let extension = path.extension().unwrap_or_default().to_str().unwrap();
@@ -146,10 +54,12 @@ fn search_all_files(start : &str, manager: DeletionManager) -> () {
                 let vec : Vec<u8> = hasher.finalize().to_vec();
                 match png_map.get(&vec) {
                     Some(result) => {
-                        manager.lock().unwrap().push(DuplicatePackage::new(path.to_str().unwrap().to_string(), result.to_string()));
+                       result.lock().unwrap().push(path.to_str().unwrap().to_string());
                     }
                     _ => {
-                        png_map.insert(vec, path.to_str().unwrap().to_string());
+                        let to_store: Mutex<Vec<String>> = Mutex::new(Vec::new());
+                        to_store.lock().unwrap().push(path.to_str().unwrap().to_string());
+                        png_map.insert(vec, to_store);
                     }
                 }
             },
@@ -157,12 +67,12 @@ fn search_all_files(start : &str, manager: DeletionManager) -> () {
                 let file_data: FileDataImg = FileDataImg::new(&path.to_str().unwrap());
                 match jpeg_map.get(&file_data) {
                     Some(result) => {
-                        manager.lock().unwrap().push(DuplicatePackage::new(path.to_str().unwrap().to_string(), result.to_string()));
+                        result.lock().unwrap().push(path.to_str().unwrap().to_string());
                     }
                     _ => {
-                        // we ignore the results of insert because we already check if the key is present in the map. 
-                        //TODO: Look into if this code could be replaced with a match on the insert call
-                        jpeg_map.insert(file_data, path.to_str().unwrap().to_string());
+                        let to_store: Mutex<Vec<String>> = Mutex::new(Vec::new());
+                        to_store.lock().unwrap().push(path.to_str().unwrap().to_string());
+                        jpeg_map.insert(file_data, to_store);
                     }
                 }
             },
@@ -173,16 +83,33 @@ fn search_all_files(start : &str, manager: DeletionManager) -> () {
 
                 match mov_map.get(&mov_data) {
                     Some(result) => {
-                        manager.lock().unwrap().push(DuplicatePackage::new(path.to_str().unwrap().to_string(), result.to_string()));
+                        result.lock().unwrap().push(path.to_str().unwrap().to_string());
                     }
                     _ => {
-                        // we ignore the results of insert because we already check if the key is present in the map. 
-                        //TODO: Look into if this code could be replaced with a match on the insert call
-                        mov_map.insert(mov_data, path.to_str().unwrap().to_string());
+                        let to_store: Mutex<Vec<String>> = Mutex::new(Vec::new());
+                        to_store.lock().unwrap().push(path.to_str().unwrap().to_string());
+                        mov_map.insert(mov_data, to_store);
                     }
                 }
             },
             _ => continue,
+        }
+    }
+}
+
+fn fragile_folder_check(fragile_folders: Vec<String>, png_map: HashMap<Vec<u8>, Mutex<Vec<String>>>, jpeg_map: HashMap<FileDataImg, Mutex<Vec<String>>>, mov_map: HashMap<FileDataMov, Mutex<Vec<String>>>) {
+    for png in png_map.into_values() {
+        let png: Vec<String> = png.lock().unwrap().to_vec();
+        if png.len() < 2 {
+            continue;
+        } else {
+            let mut contains_non_fragile_folder: bool = false;
+            for file in png {
+                    if !fragile_folders.contains(&file) {
+                        contains_non_fragile_folder = true;
+                        
+                    }
+            }
         }
     }
 }
@@ -225,33 +152,21 @@ fn main() -> std::io::Result<()> {
             folders.push(fragile_folder);
         }
         fragile_folders = folders;
-    }
-    else {
+    } else {
         fragile_folders = Vec::new();
     }
-
-    let manager: DeletionManager = Arc::new(Mutex::new(Vec::new()));
-    let manager_copy: DeletionManager = manager.clone();
-
-    let deletion_queue: DeletionManager = Arc::new(Mutex::new(Vec::new()));
-    let deletion_queue_copy: DeletionManager = deletion_queue.clone();
 
     println!("\nEnter a start folder: ");
     stdin().read_line(&mut start_folder).expect("Failed to read line");
     start_folder.truncate(start_folder.len() - 1);
     fs::canonicalize(&start_folder).ok();
 
-    let handle = thread::spawn(
-        move || {
-            search_all_files(&start_folder as &str, manager);
-        }
-    );
+    let mut png_map: HashMap<Vec<u8>, Mutex<Vec<String>>> = HashMap::new();
+    let mut jpeg_map: HashMap<FileDataImg, Mutex<Vec<String>>> = HashMap::new();
+    let mut mov_map: HashMap<FileDataMov, Mutex<Vec<String>>> = HashMap::new();
 
-    let manager_handle: JoinHandle<()> = thread::spawn(
-        move || deletion_manager_loop(manager_copy, fragile_folders, handle, deletion_queue_copy)
-    );
-
-    deletion_queue_manager(deletion_queue, manager_handle);
+    search_all_files(&start_folder, &mut png_map, &mut jpeg_map, &mut mov_map);
+    fragile_folder_check(fragile_folders, png_map, jpeg_map, mov_map);
 
     Ok(())
 }
