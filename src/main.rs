@@ -13,6 +13,7 @@ use std::sync::Mutex;
 
 use sha2::Sha512;
 use sha2::Digest;
+use sha2::digest::typenum::Length;
 
 use std::io::stdin;
 use std::vec::Vec;
@@ -97,7 +98,25 @@ fn search_all_files(start : &str, png_map: &mut HashMap<Vec<u8>, Mutex<Vec<Strin
     }
 }
 
+fn prompt_user_destroy(to_delete_from: Mutex<Vec<String>>) {
+    let to_delete_from: Vec<String> = to_delete_from.lock().unwrap().to_vec();
+    println!("Select the one to keep by passing in it's number:");
+    for i in 0..to_delete_from.len() {
+        println!("({}): {}", i, file);
+    }
+
+    let mut input_was_valid: bool = false;
+    let mut num_to_delete: u16 = 0;
+    let mut num_buf: String = String::new();
+    let attempt = stdin().read_line(&mut num_buf);
+    match attempt {
+        
+    }
+
+}
+
 fn fragile_folder_check(fragile_folders: Vec<String>, png_map: HashMap<Vec<u8>, Mutex<Vec<String>>>, jpeg_map: HashMap<FileDataImg, Mutex<Vec<String>>>, mov_map: HashMap<FileDataMov, Mutex<Vec<String>>>) {
+    // every single png
     for png in png_map.into_values() {
         let png: Vec<String> = png.lock().unwrap().to_vec();
         if png.len() < 2 {
@@ -107,11 +126,24 @@ fn fragile_folder_check(fragile_folders: Vec<String>, png_map: HashMap<Vec<u8>, 
             for file in png {
                     if !fragile_folders.contains(&file) {
                         contains_non_fragile_folder = true;
-                        
                     }
+            }
+
+            if contains_non_fragile_folder {
+                for file in png {
+                    fs::remove_file(file).ok();
+                }
+            } else {
+                for file in png {
+                    fs::remove_file(file).ok();
+                }
             }
         }
     }
+
+    // every single jpeg
+
+    // every single mov
 }
 
 fn main() -> std::io::Result<()> {
