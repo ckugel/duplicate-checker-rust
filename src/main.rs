@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use std::sync::Mutex;
 
+use exif::Error;
 use sha2::Sha512;
 use sha2::Digest;
 use sha2::digest::typenum::Length;
@@ -106,11 +107,35 @@ fn prompt_user_destroy(to_delete_from: Mutex<Vec<String>>) {
     }
 
     let mut input_was_valid: bool = false;
-    let mut num_to_delete: u16 = 0;
-    let mut num_buf: String = String::new();
-    let attempt = stdin().read_line(&mut num_buf);
-    match attempt {
-        
+    let mut num_to_keep: u16 = 0;
+    while !input_was_valid {
+        println!("Please enter a number in the range of the files above:");
+        let mut num_buf: String = String::new();
+        let attempt = stdin().read_line(&mut num_buf);
+        match attempt {
+            Error(_) => "Could not read line",
+            OK(value) => {
+                num_buf.truncate(num_buf.len() - 1);
+                match num_buf.parse::<u16>() {
+                    Ok(value) => {
+                        if value >= to_delete_from.len() {
+                            print!("\nnot a valid input, input needs to be a number in the range of the files above\n");
+                            continue;
+                        }
+                        num_to_keep = value;
+                        input_was_valid = true;
+                    }
+                    Err(_) => {
+                        print!("\nnot a valid input, input needs to be a number\n");
+                    }
+                };
+            }
+        }
+        for i in 0..to_delete_from.len() {
+            if i != num_to_keep {
+                fs::remove_file(to_delete_from[i]).ok();
+            }
+        }
     }
 
 }
